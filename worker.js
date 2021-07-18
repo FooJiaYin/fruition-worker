@@ -1,8 +1,7 @@
 /* CONFIGURATION STARTS HERE */
 
   /* Step 1: enter your domain name like fruitionsite.com */
-  const MY_DOMAIN = 'foo-bar.ml';
-  const WORKSPACE = 'lunchbox';
+  const MY_DOMAIN = 'blog.foo-bar.ml';
   
   /*
    * Step 2: enter your URL slug to page ID mapping
@@ -22,16 +21,114 @@
   
   /* Step 5: enter any custom scripts you'd like */
   const CUSTOM_SCRIPT = `
-    var elements = document.getElementsByTagName("a");
+  <script>
+    
+const notionDefaultOverlayCls = ".notion-default-overlay-container";
+const isPresent = true;
+const DEBUG = true;
+function onElementLoaded(divClassToObserve, ParentDivClass) {
+  DEBUG && console.log('waiting for element: ' + divClassToObserve);
+  const promise = new Promise((resolve, reject) => {
+    try {
+      if (document.querySelector(divClassToObserve)) {
+        DEBUG && console.log('element already present: '+ divClassToObserve);
+        resolve(true);
+        return;
+      }
+      const parentElement = ParentDivClass
+        ? document.querySelector(ParentDivClass)
+        : document;
 
-    var openAsPage = function() {
-        window.location.href = this.href;
-    };
+      const observer = new MutationObserver((mutationList, obsrvr) => {
+        const divToCheck = document.querySelector(divClassToObserve);
+        // console.log("checking for div...");
 
-    for (var i = 0; i < elements.length; i++) {
-        elements[i].addEventListener('click', openAsPage, false);
+        if (divToCheck) {
+          console.log('element loaded: ' + divClassToObserve);
+          obsrvr.disconnect(); // stop observing
+          resolve(true);
+        }
+      });
+
+      // start observing for dynamic div
+      observer.observe(parentElement, {
+        childList: true,
+        subtree: true,
+      });
+    } catch (e) {
+      console.log(e);
+      reject(Error("some issue... promise rejected"));
     }
+  });
+  return promise;
+}
+onElementLoaded(notionDefaultOverlayCls)
+    .then((isPresent) => {
+      console.log("listening for doc edit changes for openFullPage...");
 
+      docEditObserverObj = new MutationObserver((mutationList, obsrvr) => {
+        DEBUG && console.log("found changes in doc content");
+        const curUrl = window.location.href;
+        let lastPageID;
+
+        // save last page url
+        if (!curUrl.includes("&p=") && !curUrl.includes("?p=")) {
+          // All credits goes to 'dragonwocky' for this approach
+          lastPageID = (window.location.search
+            .slice(1)
+            .split("&")
+            .map((opt) => opt.split("="))
+            .find((opt) => opt[0] === "p") || [
+            "",
+            ...window.location.pathname.split(/[-|\/]/g).reverse(),
+          ])[1];
+          
+          console.log(lastPageID);
+        }
+        for (let i = 0; i < mutationList.length; i++) {
+          const m = mutationList[i];
+
+          // case: check for div change
+          if (m.type === "childList" && m.addedNodes.length > 0 && m.target) {
+            const fullPageLink = m.target.querySelector(
+              ".notion-peek-renderer [style*='height: 45px;'] > a"
+            );
+
+            if (!fullPageLink) return;
+
+            const previewPageID = (fullPageLink.href
+              .slice(1)
+              .split("&")
+              .map((opt) => opt.split("="))
+              .find((opt) => opt[0] === "p") || [
+              "",
+              ...fullPageLink.pathname.split(/[|\/]/g).reverse(),
+            ])[1];
+
+            if (previewPageID) {
+              if (previewPageID === lastPageID) {
+                console.log("going back", lastPageID);
+                window.history.back();
+              } else {
+                console.log("full page link found", fullPageLink.href);
+                fullPageLink.click();
+              }
+            }
+          }
+        }
+      });
+
+      // now add listener for doc text change
+      const defaultOverlayEl = document.querySelector(notionDefaultOverlayCls);
+
+      docEditObserverObj.observe(defaultOverlayEl, {
+        childList: true,
+        subtree: true,
+      });
+      return true;
+    })
+    .catch((e) => console.log(e));    
+  </script>
   `;
   
   /* CONFIGURATION ENDS HERE */
@@ -90,7 +187,7 @@
       return handleOptions(request);
     }
     let url = new URL(request.url);
-    url.hostname = WORKSPACE + '.notion.site';
+    url.hostname = 'www.notion.so';
     if (url.pathname === '/robots.txt') {
       return new Response('Sitemap: https://' + MY_DOMAIN + '/sitemap.xml');
     }
@@ -104,10 +201,10 @@
     if (url.pathname.startsWith('/app') && url.pathname.endsWith('js')) {
       response = await fetch(url.toString());
       let body = await response.text();
-      response = new Response(body.replace(WORKSPACE + '.notion.site', MY_DOMAIN).replace(WORKSPACE + '.notion.site', MY_DOMAIN), response);
+      response = new Response(body.replace(/www.notion.so/g, MY_DOMAIN).replace(/notion.so/g, MY_DOMAIN), response);
       response.headers.set('Content-Type', 'application/x-javascript');
       return response;
-    } else if ((url.pathname.startsWith('/api/v3/getPublicPageData'))) {
+    }  else if ((url.pathname.startsWith('/api/v3/getPublicPageData'))) {
       // Forward API
       response = await fetch(url.toString(), {
         body: request.body,
@@ -119,6 +216,7 @@
       });
       response = new Response(response.body, response);
       response.headers.set('Access-Control-Allow-Origin', '*');
+      // response.headers.set('requireInterstitial', '');
       response.body.delete('requireInterstitial');
       return response;
     } else if ((url.pathname.startsWith('/api'))) {
@@ -133,8 +231,6 @@
       });
       response = new Response(response.body, response);
       response.headers.set('Access-Control-Allow-Origin', '*');
-      // response.headers.set('requireInterstitial', '');
-      // response.body.delete('requireInterstitial');
       return response;
     } else if (slugs.indexOf(url.pathname.slice(1)) > -1) {
       const pageId = SLUG_TO_PAGE[url.pathname.slice(1)];
@@ -301,7 +397,7 @@
       };
       const open = window.XMLHttpRequest.prototype.open;
       window.XMLHttpRequest.prototype.open = function() {
-        arguments[1] = arguments[1].replace('${MY_DOMAIN}', '${WORKSPACE}.notion.site');
+        arguments[1] = arguments[1].replace('${MY_DOMAIN}', 'www.notion.so');
         return open.apply(this, [].slice.call(arguments));
       };
     </script>${CUSTOM_SCRIPT}`, {
