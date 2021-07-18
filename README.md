@@ -1,6 +1,6 @@
 # fruition-worker
 
-This project is base on https://github.com/stephenou/fruitionsite
+This project is based on https://github.com/stephenou/fruitionsite
 
 Since notion update the domain of public page, some modification on worker.js is needed:
 
